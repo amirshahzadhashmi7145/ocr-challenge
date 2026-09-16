@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+models/
+harness_output/
+test_images/*.png
+test_images/*.jpg
+test_images/*.jpeg
+test_images/*.tif
+test_images/*.tiff
+!test_images/expected.json
+.venv/
+hf/
+.env.sh

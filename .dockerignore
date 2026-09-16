@@ -1,0 +1,9 @@
+.git
+.gitignore
+*.md
+scripts
+test_images
+harness_output
+models
+**/__pycache__
+**/*.pyc
