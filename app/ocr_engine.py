@@ -42,7 +42,7 @@ Rules:
 1. License plate: output only the registration number. Do NOT include the state, province or country name, slogans, mottos, county names, web addresses, dealer frames or stickers printed around it (drop things like "CALIFORNIA", "Empire State", "THE LONE STAR STATE", "dmv.ca.gov").
 2. Chinese plate: the leading province character and letter ARE part of the registration. Keep them (for example 京A12345 or 沪B88888).
 3. Road sign: output the words and numbers printed on the sign in reading order, top to bottom. Join separate lines with a single space (for example STOP, SPEED LIMIT 65, ROAD WORK AHEAD).
-4. If the sign shows only a number, output only the number (for example 35). Never add units such as MPH.
+4. If the sign has no words, only a number, output the number alone. Never invent words or units such as MPH. If SPEED LIMIT (or other words) are printed on the sign, include them.
 5. No labels, no quotes, no explanation, no extra punctuation. Just the characters."""
 
 
@@ -118,7 +118,7 @@ def variants(im: Image.Image, n: int) -> list:
     """Test-time augmentation: original, contrast-stretched, and a sharpened (brightened if dark) copy."""
     out = [im]
     if n >= 2:
-        out.append(ImageOps.autocontrast(im, cutoff=1))
+        out.append(ImageEnhance.Sharpness(ImageOps.autocontrast(im, cutoff=1)).enhance(2.0))
     if n >= 3:
         lum = float(np.asarray(im.convert("L")).mean())
         v = ImageEnhance.Brightness(im).enhance(1.6) if lum < 80 else im
