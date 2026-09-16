@@ -3,7 +3,12 @@
 *.md
 scripts
 test_images
+test_images_real
 harness_output
 models
+hf
+.venv
+.env.sh
+*.pdf
 **/__pycache__
 **/*.pyc
