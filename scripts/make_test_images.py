@@ -15,8 +15,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "test_images")
-OUT.mkdir(parents=True, exist_ok=True)
+OUT = Path("test_images")
 rng = np.random.default_rng(0)
 EXPECTED: dict[str, str] = {}
 
@@ -134,23 +133,26 @@ def save(im: Image.Image, name: str, answer: str, **kw) -> None:
     print(f"  {name:<28} -> {answer}")
 
 
-print(f"writing to {OUT}/")
-ca = plate("7ABC123", "CALIFORNIA", "dmv.ca.gov", "white", (25, 35, 120), (190, 30, 40))
-save(ca, "plate_ca_clean.png", "7ABC123")
-save(ca.resize((200, 100), Image.LANCZOS), "plate_ca_tiny.png", "7ABC123")
-ny = plate("JHT 2951", "NEW YORK", "EMPIRE STATE", (255, 214, 90), (20, 40, 110), (20, 40, 110))
-save(perspective(ny), "plate_ny_angled.jpg", "JHT 2951", quality=85)
-tx = plate("5XYZ891", "TEXAS", "THE LONE STAR STATE", "white", "black", (40, 40, 40))
-save(motion_blur(tx), "plate_tx_motion_blur.png", "5XYZ891")
-nv = plate("8KLM456", "NEVADA", "HOME MEANS NEVADA", (235, 240, 255), (30, 30, 120), (120, 60, 60))
-save(low_light_glare(nv), "plate_nv_lowlight_glare.jpg", "8KLM456", quality=80)
-save(octagon_stop(), "stop_clean.png", "STOP")
-save(noise(octagon_stop()), "stop_noise.tiff", "STOP")
-save(speed_limit("65"), "speed_limit_65.jpg", "SPEED LIMIT 65", quality=88)
-save(perspective(speed_limit("45"), dx=90, dy=60).filter(ImageFilter.GaussianBlur(1.2)), "speed_limit_45_angled_blur.jpg", "SPEED LIMIT 45", quality=80)
-save(diamond(["ROAD", "WORK", "AHEAD"]), "road_work_ahead.png", "ROAD WORK AHEAD")
-save(noise(diamond(["ICY", "BRIDGE"], color=(255, 200, 0)), sigma=30), "icy_bridge_noise.png", "ICY BRIDGE")
-save(plaque("35"), "advisory_35.tiff", "35")
+if __name__ == "__main__":
+    OUT = Path(sys.argv[1] if len(sys.argv) > 1 else "test_images")
+    OUT.mkdir(parents=True, exist_ok=True)
+    print(f"writing to {OUT}/")
+    ca = plate("7ABC123", "CALIFORNIA", "dmv.ca.gov", "white", (25, 35, 120), (190, 30, 40))
+    save(ca, "plate_ca_clean.png", "7ABC123")
+    save(ca.resize((200, 100), Image.LANCZOS), "plate_ca_tiny.png", "7ABC123")
+    ny = plate("JHT 2951", "NEW YORK", "EMPIRE STATE", (255, 214, 90), (20, 40, 110), (20, 40, 110))
+    save(perspective(ny), "plate_ny_angled.jpg", "JHT 2951", quality=85)
+    tx = plate("5XYZ891", "TEXAS", "THE LONE STAR STATE", "white", "black", (40, 40, 40))
+    save(motion_blur(tx), "plate_tx_motion_blur.png", "5XYZ891")
+    nv = plate("8KLM456", "NEVADA", "HOME MEANS NEVADA", (235, 240, 255), (30, 30, 120), (120, 60, 60))
+    save(low_light_glare(nv), "plate_nv_lowlight_glare.jpg", "8KLM456", quality=80)
+    save(octagon_stop(), "stop_clean.png", "STOP")
+    save(noise(octagon_stop()), "stop_noise.tiff", "STOP")
+    save(speed_limit("65"), "speed_limit_65.jpg", "SPEED LIMIT 65", quality=88)
+    save(perspective(speed_limit("45"), dx=90, dy=60).filter(ImageFilter.GaussianBlur(1.2)), "speed_limit_45_angled_blur.jpg", "SPEED LIMIT 45", quality=80)
+    save(diamond(["ROAD", "WORK", "AHEAD"]), "road_work_ahead.png", "ROAD WORK AHEAD")
+    save(noise(diamond(["ICY", "BRIDGE"], color=(255, 200, 0)), sigma=30), "icy_bridge_noise.png", "ICY BRIDGE")
+    save(plaque("35"), "advisory_35.tiff", "35")
 
-(OUT / "expected.json").write_text(json.dumps(EXPECTED, indent=2, ensure_ascii=False), encoding="utf-8")
-print(f"\n{len(EXPECTED)} images + expected.json written. Add real photos and the PDF samples next.")
+    (OUT / "expected.json").write_text(json.dumps(EXPECTED, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\n{len(EXPECTED)} images + expected.json written. Add real photos and the PDF samples next.")

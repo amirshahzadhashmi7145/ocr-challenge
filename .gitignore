@@ -8,6 +8,12 @@ test_images/*.jpeg
 test_images/*.tif
 test_images/*.tiff
 !test_images/expected.json
+test_images_hard/*.png
+test_images_hard/*.jpg
+test_images_hard/*.jpeg
+test_images_hard/*.tif
+test_images_hard/*.tiff
+!test_images_hard/expected.json
 .venv/
 hf/
 .env.sh
