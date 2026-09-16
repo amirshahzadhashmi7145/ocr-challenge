@@ -1,6 +1,8 @@
 # Installed on top of the mandated ROCm base image, which already ships torch and Pillow.
 # After your first notebook session, pin what actually installed there:
 #   pip freeze | grep -iE '^(transformers|accelerate|huggingface.hub|tokenizers|safetensors)='
-transformers>=4.57
-accelerate
-huggingface_hub
+transformers==5.17.0
+accelerate==1.15.0
+huggingface_hub==1.31.0
+tokenizers==0.23.2
+safetensors==0.8.0
