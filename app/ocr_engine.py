@@ -108,6 +108,12 @@ def fix_cn_plate(t: str) -> str:
         return t
     prov, letter, serial = m.groups()
     serial = re.sub(r"[\s·\-\.]", "", serial).replace("I", "1").replace("O", "0")
+    while len(serial) > 5 and serial[0] not in "DF" and serial[-1] not in "DF":
+        runs = [(len(r.group(0)), r.start()) for r in re.finditer(r"(.)\1+", serial)]
+        if not runs:
+            break
+        _, i = max(runs)
+        serial = serial[:i] + serial[i + 1:]
     return f"{prov}{letter}·{serial}"
 
 
