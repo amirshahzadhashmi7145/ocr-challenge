@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageEnhance, ImageFont, ImageOps
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2.5-VL-3B-Instruct"
 
@@ -43,7 +43,9 @@ Rules:
 2. Chinese plate: the leading province character and letter ARE part of the registration. Keep them (for example 京A12345 or 沪B88888).
 3. Road sign: output the words and numbers printed on the sign in reading order, top to bottom. Join separate lines with a single space (for example STOP, SPEED LIMIT 65, ROAD WORK AHEAD).
 4. If the sign has no words, only a number, output the number alone. Never invent words or units such as MPH. If SPEED LIMIT (or other words) are printed on the sign, include them.
-5. No labels, no quotes, no explanation, no extra punctuation. Just the characters."""
+5. No labels, no quotes, no explanation, no extra punctuation. Just the characters.
+6. A vanity plate can spell real words (for example DUMB APE); still output only the registration, never the slogan or state name printed above or below it.
+7. Mainland Chinese plates never contain the letters I or O; read those as the digits 1 and 0."""
 
 
 # --------------------------------------------------------------------------- text utils
@@ -51,6 +53,70 @@ Rules:
 def norm(s: str) -> str:
     """The grader's normalisation: uppercase, drop whitespace and the characters - . · _"""
     return re.sub(r"[\s\-\.\u00b7_]", "", (s or "").upper())
+
+
+_US_STATES = [
+    "ALABAMA","ALASKA","ARIZONA","ARKANSAS","CALIFORNIA","COLORADO","CONNECTICUT","DELAWARE","FLORIDA","GEORGIA",
+    "HAWAII","IDAHO","ILLINOIS","INDIANA","IOWA","KANSAS","KENTUCKY","LOUISIANA","MAINE","MARYLAND","MASSACHUSETTS",
+    "MICHIGAN","MINNESOTA","MISSISSIPPI","MISSOURI","MONTANA","NEBRASKA","NEVADA","NEW HAMPSHIRE","NEW JERSEY",
+    "NEW MEXICO","NEW YORK","NORTH CAROLINA","NORTH DAKOTA","OHIO","OKLAHOMA","OREGON","PENNSYLVANIA","RHODE ISLAND",
+    "SOUTH CAROLINA","SOUTH DAKOTA","TENNESSEE","TEXAS","UTAH","VERMONT","VIRGINIA","WASHINGTON","WEST VIRGINIA",
+    "WISCONSIN","WYOMING","DISTRICT OF COLUMBIA","WASHINGTON DC","WASHINGTON D.C.",
+]
+_US_SLOGANS = [
+    "THE EMPIRE STATE","EMPIRE STATE","EXCELSIOR","THE LONE STAR STATE","LONE STAR STATE","SUNSHINE STATE",
+    "MYFLORIDA.COM","IN GOD WE TRUST","GARDEN STATE","LAND OF LINCOLN","FIRST IN FLIGHT","FIRST IN FREEDOM",
+    "LIVE FREE OR DIE","FAMOUS POTATOES","SCENIC IDAHO","WILD WONDERFUL","MOUNTAINEERS ARE ALWAYS FREE","ALMOST HEAVEN",
+    "SPORTSMAN'S PARADISE","PELICAN STATE","VACATIONLAND","AMERICA'S DAIRYLAND","GREAT LAKES STATE","GREAT LAKES",
+    "PURE MICHIGAN","WATER WONDERLAND","GRAND CANYON STATE","BIRTHPLACE OF AVIATION","HOME MEANS NEVADA",
+    "THE SILVER STATE","EVERGREEN STATE","SHOW ME STATE","SHOW-ME STATE","BLUEGRASS STATE","UNBRIDLED SPIRIT",
+    "HOOSIER STATE","TREASURE STATE","BIG SKY","OCEAN STATE","CONSTITUTION STATE","GREEN MOUNTAIN STATE",
+    "THE NATURAL STATE","NATURAL STATE","LAND OF OPPORTUNITY","PEACH STATE","GEORGIA ON MY MIND","VOLUNTEER STATE",
+    "MAGNOLIA STATE","YELLOWHAMMER STATE","HEART OF DIXIE","SWEET HOME ALABAMA","SOONER STATE","NATIVE AMERICA",
+    "LAND OF ENCHANTMENT","CENTENNIAL STATE","EQUALITY STATE","FOREVER WEST","GEM STATE","BEEHIVE STATE",
+    "LIFE ELEVATED","GREATEST SNOW ON EARTH","SPIRIT OF AMERICA","SMILING FACES BEAUTIFUL PLACES",
+    "WHILE I BREATHE I HOPE","TAXATION WITHOUT REPRESENTATION","END TAXATION WITHOUT REPRESENTATION","ALOHA STATE",
+    "THE LAST FRONTIER","GOLDEN STATE","DMV.CA.GOV","EXPLORE MINNESOTA","LAND OF 10,000 LAKES","10,000 LAKES",
+    "10000 LAKES","VIRGINIA IS FOR LOVERS","MARYLAND PROUD","KEYSTONE STATE","VISITPA.COM","THE FIRST STATE",
+    "FIRST STATE","LEGENDARY","PEACE GARDEN STATE","DISCOVER THE SPIRIT","THE GOOD LIFE","GREAT FACES GREAT PLACES",
+    "PACIFIC WONDERLAND",
+]
+_BANNER_RE = re.compile(
+    r"(?<![A-Z0-9])(?:" + "|".join(re.escape(p) for p in sorted(_US_STATES + _US_SLOGANS, key=len, reverse=True)) + r")(?![A-Z0-9])",
+    re.I,
+)
+_URL_RE = re.compile(r"(?<![A-Z0-9])(?:WWW\.)?[A-Z0-9-]+(?:\.[A-Z0-9-]+)*\.(?:COM|GOV|ORG|NET|US)(?![A-Z0-9])", re.I)
+
+
+def strip_us_banners(t: str) -> str:
+    """Drop US state names, mottos and web addresses printed around a plate number.
+    Only applied when something is left afterwards, so a plate that IS such a word survives."""
+    s = _URL_RE.sub(" ", t)
+    s = _BANNER_RE.sub(" ", s)
+    s = re.sub(r"\s+", " ", s).strip(" -.,:;'\"")
+    return s if len(norm(s)) >= 2 else t
+
+
+_CN_PLATE_RE = re.compile(r"^([\u4e00-\u9fff])\s*([A-Z])[\s·\-\.]*([A-Z0-9][A-Z0-9\s·\-\.]{3,8})$")
+
+
+def fix_cn_plate(t: str) -> str:
+    """Mainland Chinese plates never use the letters I or O in the serial (GA 36 standard):
+    after the province character and letter, I is 1 and O is 0."""
+    m = _CN_PLATE_RE.match(t.strip().upper())
+    if not m:
+        return t
+    prov, letter, serial = m.groups()
+    serial = re.sub(r"[\s·\-\.]", "", serial).replace("I", "1").replace("O", "0")
+    return f"{prov}{letter}·{serial}"
+
+
+def _noise_level(im: Image.Image) -> float:
+    """Mean absolute difference between the grayscale image and its 3x3 median: high for sensor noise."""
+    g = im.convert("L")
+    a = np.asarray(g, dtype=np.float32)
+    m = np.asarray(g.filter(ImageFilter.MedianFilter(3)), dtype=np.float32)
+    return float(np.abs(a - m).mean())
 
 
 _LABEL_RE = re.compile(
@@ -114,16 +180,27 @@ def load_image(path: str, max_side: int = 1280, min_side: int = 640) -> Image.Im
     return im
 
 
+NOISE_THRESHOLD = 14.5
+
+
 def variants(im: Image.Image, n: int) -> list:
-    """Test-time augmentation: original, contrast-stretched, and a sharpened (brightened if dark) copy."""
+    """Test-time augmentation chosen by image condition: noisy images get median-filtered variants,
+    dark images get brightened, everything else gets contrast plus sharpening."""
     out = [im]
-    if n >= 2:
-        out.append(ImageEnhance.Sharpness(ImageOps.autocontrast(im, cutoff=1)).enhance(2.0))
+    if n < 2:
+        return out
+    noisy = _noise_level(im) > NOISE_THRESHOLD
+    dark = float(np.asarray(im.convert("L")).mean()) < 80
+    base = im.filter(ImageFilter.MedianFilter(3)) if noisy else im
+    if dark:
+        base = ImageEnhance.Brightness(base).enhance(1.6)
+    out.append(ImageOps.autocontrast(base, cutoff=1))
     if n >= 3:
-        lum = float(np.asarray(im.convert("L")).mean())
-        v = ImageEnhance.Brightness(im).enhance(1.6) if lum < 80 else im
-        out.append(ImageEnhance.Sharpness(v).enhance(2.0))
-    return out[: max(1, n)]
+        if noisy:
+            out.append(ImageOps.autocontrast(im.filter(ImageFilter.MedianFilter(5)), cutoff=1))
+        else:
+            out.append(ImageEnhance.Sharpness(ImageOps.autocontrast(base, cutoff=1)).enhance(2.0))
+    return out[:n]
 
 
 # --------------------------------------------------------------------------- engine
@@ -260,7 +337,7 @@ class OCREngine:
                 output_scores=True,
             )
         gen = out.sequences[0, inputs["input_ids"].shape[1]:]
-        raw = self.processor.batch_decode([gen], skip_special_tokens=True, clean_up_tokenization_spaces=True)[0]
+        raw = self.processor.batch_decode([gen], skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         return raw, self._mean_token_prob(out.scores, gen)
 
     def _mean_token_prob(self, scores, gen_ids) -> float:
@@ -289,7 +366,7 @@ class OCREngine:
                 if elapsed + per_pass > self.time_budget_s:
                     break
             raw, p = self._generate(v)
-            cands.append((clean_text(raw), p, raw))
+            cands.append((fix_cn_plate(strip_us_banners(clean_text(raw))), p, raw))
 
         groups: dict[str, dict] = {}
         for txt, p, _raw in cands:
