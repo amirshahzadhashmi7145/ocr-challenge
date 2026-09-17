@@ -180,7 +180,7 @@ def load_image(path: str, max_side: int = 1280, min_side: int = 640) -> Image.Im
     return im
 
 
-NOISE_THRESHOLD = 14.5
+NOISE_THRESHOLD = 9.0
 
 
 def variants(im: Image.Image, n: int) -> list:
